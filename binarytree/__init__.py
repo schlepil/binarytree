@@ -451,8 +451,10 @@ class Node:
         # noinspection PyProtectedMember
         return self.graphviz()._repr_svg_()
 
-    def graphviz(self, *args: Any, **kwargs: Any) -> Digraph:
-        """Return a graphviz.Digraph_ object representing the binary tree.
+    def graphviz(self, anno:"annotator"=None, *args: Any, **kwargs: Any) -> Digraph:
+        """ Return a graphviz.Digraph_ object representing the binary tree.
+        
+            :param anno: Annotator object to change representation
 
         This method's positional and keyword arguments are passed directly into the
         the Digraph's **__init__** method.
@@ -485,13 +487,23 @@ class Node:
         for node in self:
             node_id = str(id(node))
 
-            digraph.node(node_id, nohtml(f"<l>|<v> {node.value}|<r>"))
+            if anno.node2ncolor(node) != "":
+                digraph.node(node_id, nohtml(f"<l>|<v> {node.value}{anno.node2str(node)}|<r>"), fillcolor=anno.node2ncolor(node))
+            else:
+                digraph.node(node_id, nohtml(f"<l>|<v> {node.value}{anno.node2str(node)}|<r>"))
 
             if node.left is not None:
-                digraph.edge(f"{node_id}:l", f"{id(node.left)}:v")
+
+                if anno.edge2ecolor(node, node.left) != "":
+                    digraph.edge(f"{node_id}:l", f"{id(node.left)}:v", color=f"{anno.edge2ecolor(node, node.left)}")
+                else:
+                    digraph.edge(f"{node_id}:l", f"{id(node.left)}:v")
 
             if node.right is not None:
-                digraph.edge(f"{node_id}:r", f"{id(node.right)}:v")
+                if anno.edge2ecolor(node, node.right) != "":
+                    digraph.edge(f"{node_id}:r", f"{id(node.right)}:v", color=f"{anno.edge2ecolor(node, node.right)}")
+                else:
+                    digraph.edge(f"{node_id}:r", f"{id(node.right)}:v")
 
         return digraph
 
@@ -2126,3 +2138,139 @@ def heap(
     else:
         heapq.heapify(values)
         return build(values)
+
+def randomize_tree_val(bintree:Node):
+    """ Replaces all values in the tree with random int values in the
+        range of [-1000, 1000]
+    """
+    
+    n_nodes = _get_tree_properties(bintree)["size"]
+    new_vals = random.choices(list(range(-1000,1000)), k=n_nodes)
+    for n,v in zip(bintree, new_vals):
+        n.value = v    
+    
+class annotator:
+    def __init__(self, str_dict:dict=None, n_dict:dict=None, edge_dict:dict = None):
+        """ Annotator class the color and add information to a binary tree
+        
+            :param str_dict: Dict with key: node values; value: str with the additional info added to the node
+            :type str_dict: dict
+            :param n_dict: Dict with key: node values; value: str with the desired color
+            :type n_dict: dict
+            :param edge_dict: Dict with key: tuple of node values, (src.value, dst.value); value: str with the desired color of the edge
+            :type edge_dict: dict        
+        """
+        self.str_dict = str_dict if str_dict is not None else {}
+        self.n_dict = n_dict if n_dict is not None else {}
+        self.edge_dict = edge_dict if edge_dict is not None else {}
+
+
+    def node2str(self, node:"Node"):
+        """ Get the str for the given node, empty if not set
+            
+            :param node: The node
+        """
+        try:
+            return self.str_dict[node.value]
+        except KeyError:
+            return ""
+
+    def node2ncolor(self, node:"Node"):
+        """ Get the color str for the given node, empty if not set
+            
+            :param node: The node
+        """
+        try:
+            return self.n_dict[node.value]
+        except KeyError:
+            return ""
+
+    def edge2ecolor(self, src:"Node", dst:"Node"):
+        """ Get the color str for the edge from src to dst, empty if not set
+            
+            :param node: The src and dst node
+        """
+        try:
+            return self.edge_dict[(src.value, dst.value)]
+        except KeyError:
+            return ""
+
+    def color_path(self, nodes:List["Node"], color="red"):
+        """ Color a path in the bt
+       
+            :param nodes: List of nodes on the path. nodes[i+1] must be a child of nodes[i]
+            :type nodes: List[Node]
+            :param color: The color
+        """
+        for src, dst in zip(nodes[:-1], nodes[1:]):
+            self.n_dict[src.value] = color
+            self.edge_dict[(src.value, dst.value)] = color
+        self.n_dict[nodes[-1].value] = color
+
+    def uncolor_path(self, nodes:List["Node"]):
+        """ Uncolor a path in the bt
+       
+            :param nodes: List of nodes on the path. nodes[i+1] must be a child of nodes[i]
+            :type nodes: List[Node]
+        """
+        return self.color_path(nodes, "")
+
+    def color_node(self, node:"Node", color="red"):
+        """ Color a single node
+       
+            :param node: The node
+            :param color: The color
+        """
+        self.n_dict[node.value] = color
+
+    def uncolor_node(self, node:"Node"):
+        """ Uncolor a single node
+       
+            :param node: The node
+        """
+        return self.color_node(node, "")
+
+    def annotate_node(self, node:"Node", txt:str):
+        """ Annotate a single node
+       
+            :param node: The node
+            :param txt: Annotation text
+        """
+        self.str_dict[node.value] = txt
+
+    def unannotate_node(self, node:"Node"):
+        """ Erase annotation of a single node
+       
+            :param node: The node
+        """
+        return self.annotate_node(node, "")
+
+    def verify(self, bt:"Node"):
+        """ Verifies that all annotated nodes and edges exist in the bt or the corresponding value is empty str
+            
+            :param bt: Binary tree to consistent with annotation
+        """
+        st_set = set()
+        e_set = set()
+
+        for n in bt:
+            if n.value in st_set:
+                print("Value has double occur")
+                return False
+            st_set.add(n.value)
+            for nprime in [n.left, n.right]:
+                if nprime is not None:
+                    e_set.add((n.value, nprime.value))
+
+        if not all(map(lambda v: v in st_set or self.str_dict[v] == "", self.str_dict.keys())):
+            print("States annotated but not existing for string annotation")
+            return False
+        if not all(map(lambda v: v in st_set or self.n_dict[v] == "", self.n_dict.keys())):
+            print("States annotated but not existing for color annotation")
+            return False
+        if not all(map(lambda v: v in st_set or self.edge_dict[v] == "", self.edge_dict.keys())):
+            print("Edges annotated but not existing for color annotation")
+            return False
+
+        return True
+
