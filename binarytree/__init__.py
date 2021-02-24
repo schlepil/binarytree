@@ -7,6 +7,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 from graphviz import Digraph, nohtml
 from pkg_resources import get_distribution
 
+from copy import deepcopy
+
 from binarytree.exceptions import (
     NodeIndexError,
     NodeModifyError,
@@ -24,8 +26,9 @@ RIGHT_FIELD = "right"
 VAL_FIELD = "val"
 VALUE_FIELD = "value"
 
-NodeValue = Union[float, int]
+NodeValue = Union[float, int, str]
 NodeProperty = Union[float, int, bool]
+NodeValueTup = (float, int, str)
 
 
 class Node:
@@ -58,7 +61,7 @@ class Node:
         self.left = left
         self.right = right
 
-        if not isinstance(value, (float, int)):
+        if not isinstance(value, NodeValueTup):
             raise NodeValueError("node value must be a float or int")
 
         if left is not None and not isinstance(left, Node):
@@ -163,11 +166,11 @@ class Node:
             if obj is not None and not isinstance(obj, Node):
                 raise NodeTypeError("right child must be a Node instance")
         elif attr == VALUE_FIELD:
-            if not isinstance(obj, (float, int)):
+            if not isinstance(obj, NodeValueTup):
                 raise NodeValueError("node value must be a float or int")
             object.__setattr__(self, VAL_FIELD, obj)
         elif attr == VAL_FIELD:
-            if not isinstance(obj, (float, int)):
+            if not isinstance(obj, NodeValueTup):
                 raise NodeValueError("node value must be a float or int")
             object.__setattr__(self, VALUE_FIELD, obj)
 
@@ -442,6 +445,9 @@ class Node:
             raise NodeNotFoundError("no node to delete at index {}".format(index))
 
         setattr(parent, child_attr, None)
+    
+    def __deepcopy__(self, *args, **kwargs):
+        return Node(deepcopy(self.value), deepcopy(self.left), deepcopy(self.right))
 
     def _repr_svg_(self) -> str:
         """Display the binary tree using Graphviz (used for `Jupyter notebooks`_).
@@ -481,6 +487,8 @@ class Node:
                 "fillcolor": "lightgray",
                 "fontcolor": "black",
             }
+        
+        anno = annotator() if anno is None else anno
 
         digraph = Digraph(*args, **kwargs)
 
@@ -603,11 +611,11 @@ class Node:
                         raise NodeTypeError(
                             "invalid node instance at index {}".format(index)
                         )
-                    if not isinstance(node.val, (float, int)):
+                    if not isinstance(node.val, NodeValueTup):
                         raise NodeValueError(
                             "invalid node value at index {}".format(index)
                         )
-                    if not isinstance(node.value, (float, int)):
+                    if not isinstance(node.value, NodeValueTup):
                         raise NodeValueError(
                             "invalid node value at index {}".format(index)
                         )
@@ -1962,6 +1970,9 @@ def tree(height: int = 3, is_perfect: bool = False) -> Optional[Node]:
          ...
         TreeHeightError: height must be an int between 0 - 9
     """
+    if (height == -1):
+        return None
+    
     _validate_tree_height(height)
     values = _generate_random_node_values(height)
     if is_perfect:
@@ -2221,6 +2232,8 @@ class annotator:
             :param node: The node
             :param color: The color
         """
+        if node is None:
+            return
         self.n_dict[node.value] = color
 
     def uncolor_node(self, node:"Node"):
@@ -2236,6 +2249,8 @@ class annotator:
             :param node: The node
             :param txt: Annotation text
         """
+        if node is None:
+            return
         self.str_dict[node.value] = txt
 
     def unannotate_node(self, node:"Node"):
@@ -2274,3 +2289,256 @@ class annotator:
 
         return True
 
+def dict2prefixtree(enc_dict:dict):
+    """ Create a binary tree that corresponds to the prefix encoding given as dict
+        Note: In order to be optimal, the tree should be locally complement, we do not enforce this here
+        
+        :param enc_dict: The dictionnary (char/float/int):"occurence string"
+        :type enc_dict: dict
+    """
+    node_dict = {}
+    for (v,c) in enc_dict.items():
+        if c in node_dict.keys():
+            raise RuntimeError(f"code {c} used twice")
+        n = Node(v)
+        found = False
+        while not found:
+            d = c[-1]
+            c = c[:-1]
+            nprime = node_dict.get(c)
+            found = True
+            if nprime is None:
+                nprime = Node("")
+                node_dict[c] = nprime
+                found = False or (c == "")
+            
+            if d == '0':
+                nprime.left = n
+            else:
+                nprime.right = n
+            n = nprime
+    return node_dict[""]
+
+def is_prefixtree(root:Node):
+    """ Checks if the given tree is a prefix tree: That is locally complete and only leaves have non-empty values
+    """
+    if root is None:
+        return True
+    
+    if not ((root.left is None and root.right is None)
+           or (root.left is not None and root.right is not None)):
+        return False
+    if root.right is None and root.value == "":
+        return False
+    if root.right is not None and root.value != "":
+        return False
+    return is_prefixtree(root.left) and is_prefixtree(root.right)
+
+def prefix_decode(prefixtree:Node, code:str):
+    """ Uses a the given prefixtree to decode a string
+    """
+    
+    def is_leaf(n:Node):
+        return (n.left is None) and (n.right is None)
+    
+    res = ""
+    
+    i = 0
+    lc = len(code)
+    while i != lc:
+        n = prefixtree
+        while not is_leaf(n):
+            if code[i] == "0":
+                n = n.left
+            else:
+                n = n.right
+            i += 1
+        res += n.value
+    return res
+            
+def generate_random_encoding_dict():
+    root = tree(random.randint(1,5))
+    enc_dict = dict()
+    
+    def is_leaf(n:Node):
+        return (n.left is None) and (n.right is None)
+    
+    def rec_(cn:Node, occ:str):
+        if cn is None:
+            return
+        if is_leaf(cn):
+            enc_dict[chr(cn.value+33)] = occ
+            return
+        rec_(cn.left, occ+"0")
+        rec_(cn.right, occ+"1")
+    
+    rec_(root, "")
+    return enc_dict
+    
+def general_recursion(n:Node, f_pre:"fun", f_in:"fun", f_post:"fun", f_ret:"fun", *args):
+    if n is None:
+        return f_ret(n, *args)
+    
+    s_pre = f_pre(n, *args)
+    ret_left = general_recursion(n.left, f_pre, f_in, f_post, f_ret, *args, *s_pre)
+    s_in = f_in(n, *args, *s_pre, *ret_left)
+    ret_right = general_recursion(n.right, f_pre, f_in, f_post, f_ret, *args, *s_pre, *ret_left, *s_in)
+    s_post = f_post(n, *args, *s_pre, *ret_left, *s_in, *ret_right)
+    
+    return f_ret(n, *args, *s_pre, *ret_left, *s_in, *ret_right, *s_post)
+
+def bst2list(bst:Node):
+    L = []
+    def app(n:Node):
+        L.append(n.value)
+        return []
+    f_pre = f_post = f_ret = lambda *args: []
+    f_in = lambda n, *args: app(n)
+    
+    general_recursion(bst, f_pre, f_in, f_post, f_ret)
+    return L
+
+def get_complete_tree(ndes:int):
+    """ Generates a complete tree of the specified size
+    """
+    assert ndes > 0
+    from collections import deque
+    
+    treesize = 1
+    root = Node(treesize)
+    
+    todo = deque()
+    todo.append((0, root))
+    todo.append((1, root))
+    while treesize < ndes:
+        side, pnode = todo.popleft()
+        treesize += 1
+        if side:
+            nnode = pnode.right = Node(treesize)
+        else:
+            nnode = pnode.left = Node(treesize)
+        todo.append((0, nnode))
+        todo.append((1, nnode))
+    return root
+        
+
+def fillbstfromsorted(bst:Node, L:List["value"]):
+    Lp = list(reversed(deepcopy(L)))
+    def take(n:Node):
+        n.value = Lp.pop()
+        return []
+    
+    f_pre = f_post = f_ret = lambda *args: []
+    f_in = lambda n, *args: take(n)
+    
+    general_recursion(bst, f_pre, f_in, f_post, f_ret)
+    
+def get_bst(height):
+    """ Generate a random binary search tree with integers as labels
+    """
+    
+    bst = tree(height)
+    L = bst.size*[0]
+    for i in range(1, len(L)):
+        L[i] = L[i-1] + random.randint(1,20)
+    m = int(sum(L)/len(L))
+    for i in range(len(L)):
+        L[i] -= m
+    fillbstfromsorted(bst, L)
+    return bst
+
+def bst_search(bst:Node, x:"value"):
+    """ Searches for a node with value x.
+        If it is found, a pair [True, node] is returned with node.value == x
+        If it is not found, a pair [False, node] is returned, with node being the last leaf checked
+    """
+    nlast = bst
+    n = bst
+    while True:
+        nlast = n
+        if n.value == x:
+            return [True, n]
+        n = n.left if x < n.value else n.right
+        if n is None:
+            return [False, nlast]
+
+def bst_insert_leaf(bst:Node, x:"value"):
+    """ Inserts a new node with value x into the bst as a leaf.
+        Throws an exception if x already exists.
+    """
+    
+    f,p = bst_search(bst, x)
+    if f:
+        raise RuntimeError(f"Label {x} already exists in the tree")
+    if x < p.value:
+        p.left = Node(x)
+    else:
+        p.right = Node(x)
+    return bst
+
+def bst_insert_root(bst:Node, x:"value"):
+    """ Inserts a new node with value x into the bst as root.
+        Throws an exception if x already exists.
+        Returns the new root
+    """
+    
+    class proxy:
+        def __init__(self, n, s):
+            self.n = n
+            self.s = s
+        
+        def get(self):
+            if self.s:
+                return self.n.right
+            else:
+                return self.n.left
+        def assign(self, other):
+            if self.s:
+                self.n.right = other
+            else:
+                self.n.left = other
+        
+    def insert_impl_(b,l,r):
+        if b is None:
+            return
+        bv = b.value
+        if x < bv:
+            bl = b.left
+            b.left = None
+            r.assign(b)
+            return insert_impl_(bl, l, proxy(r.get(),0))
+        elif x > bv:
+            br = b.right
+            b.right = None
+            l.assign(b)
+            return insert_impl_(br, proxy(l.get(), 1), r)
+        else:
+            raise RuntimeError(f"Label {x} already exists in the tree")
+    root = Node(x)
+    insert_impl_(bst, proxy(root, 0), proxy(root, 1))
+    return root
+
+def rand_node(node:Node):
+    """ Randomly chose one of the nodes in the tree
+    """
+    l = [n for n in node]
+    return random.choice(l)
+
+def bst_labels_in_range(bst:Node, a:"value", b:"value"):
+    """ Return the number of labels in the bst that lie in the interval
+        [a, b[
+    """
+    
+    def rec_impl_(bst):
+        if bst is None:
+            return 0
+        
+        n_elems = (a <= bst.value and bst.value < b)
+        
+        if a <= bst.value:
+            n_elems += rec_impl_(bst.left)
+        if bst.value < b:
+            n_elems += rec_impl_(bst.right)
+        return n_elems
+        
+    return rec_impl_(bst)
