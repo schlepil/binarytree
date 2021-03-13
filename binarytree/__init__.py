@@ -2452,6 +2452,8 @@ def bst_search(bst:Node, x:"value"):
         If it is found, a pair [True, node] is returned with node.value == x
         If it is not found, a pair [False, node] is returned, with node being the last leaf checked
     """
+    if bst is None:
+        return [False, None]
     nlast = bst
     n = bst
     while True:
@@ -2482,7 +2484,10 @@ def bst_insert_root(bst:Node, x:"value"):
         Returns the new root
     """
     
-    class proxy:
+    class rel_place:
+        """ class describing a place in a binary tree
+            with respect to its parent
+        """
         def __init__(self, n, s):
             self.n = n
             self.s = s
@@ -2506,12 +2511,12 @@ def bst_insert_root(bst:Node, x:"value"):
             bl = b.left
             b.left = None
             r.assign(b)
-            return insert_impl_(bl, l, proxy(r.get(),0))
+            return insert_impl_(bl, l, rel_place(r.get(),0))
         elif x > bv:
             br = b.right
             b.right = None
             l.assign(b)
-            return insert_impl_(br, proxy(l.get(), 1), r)
+            return insert_impl_(br, rel_place(l.get(), 1), r)
         else:
             raise RuntimeError(f"Label {x} already exists in the tree")
     root = Node(x)
@@ -2542,3 +2547,106 @@ def bst_labels_in_range(bst:Node, a:"value", b:"value"):
         return n_elems
         
     return rec_impl_(bst)
+
+def bst_delete_node(bst:Node, x:"val"):
+    """ Delete a node with a given label value from the bst.
+        Returns the new root and whether a node was acutally deleted 
+        or not. In other words, if there existed a node with label
+        x before the deletetion in the bst
+    """
+    if bst is None:
+        return [False, None] #Nothing deleted, empty tree returned
+    
+    # Otherwise we have to search for the node while keeping track of its 
+    # parent. Then in the second step we can actually delete it
+    
+    # Step 0 Search the node to be deleted while tracking the parent
+    p = None #parent
+    d = None # direction
+    n = bst #node
+    while n is not None:
+        if n.value == x:
+            break
+        p = n
+        d = 0 if n.value < x else 1
+        n = n.right if d else n.left
+    
+    if n is None:
+        return [False, bst]
+    
+    # Step 1: Actual deletion, here 3 cases have to be taken into account
+    # The node being a leaf, has one child or two children
+    new_root = -1
+    if n.left is not None and n.right is not None:
+        # Two children
+        # In this case: search the inorder predescessor and swap them
+        inopp = n #parent if inorder pred
+        inop = n.left
+        while inop.right is not None:
+            inopp = inop
+            inop = inop.right
+        # Exchange values
+        bst.value = inop.value
+        # Cut it from the tree
+        inopp.right = inop.left
+        new_root = bst
+    elif n.left is not None or n.right is not None:
+        # Only one child
+        # We can cut the node from the tree by replacing it with
+        # its only in child except if it is the root
+        if p is None:
+            new_root = n.left if n.left is not None else n.right
+        else:
+            new_root = bst
+            if d:
+                p.right = n.left if n.left is not None else n.right
+            else:
+                p.left = n.left if n.left is not None else n.right
+    elif n.left is None and n.right is None:
+        # Leaf
+        # We can simply delete it
+        # this means setting the place in the parent to None
+        # or create a new node
+        if p is None:
+            # root
+            new_root = None
+        else:
+            if d:
+                p.right = None
+            else:
+                p.left = None
+            new_root = bst
+    else:
+        raise RuntimeError("Unexpected case!")
+    assert new_root != -1
+    return [True, new_root]
+    
+
+##################################################
+################ AVL tree section ################
+##################################################
+
+class AVLNode(Node):
+    """ Implementation of a node representing a avl tree
+        This is a usual node of a bst and in addition it also keeps track 
+        of its balance factor (bf)
+    """
+    def __init__(self, x:"val", left:Optional[Node], right:Optional[Node], bf:Optional[int]):
+        Node.__init__(self, x, left, right)
+        self.bf = bf
+    
+    def graphviz(anno:annotator=None):
+        from copy import deepcopy
+        if anno is None:
+            anno = {}
+        
+        # Use the annotator to add the balance factor
+        anno2 = deepcopy(anno)
+        for n in self:
+            anno2.annotate_node(node, f" : {n.bf} - {anno.node2str(n)}")
+        return Node.graphviz(self, anno2)
+        
+        
+    
+
+    
