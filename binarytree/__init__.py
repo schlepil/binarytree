@@ -2657,7 +2657,27 @@ class AVLNode(Node):
         for n in self:
             anno2.annotate_node(node, f" : {n.bf} - {anno.node2str(n)}")
         return Node.graphviz(self, anno2)
-        
+
+def make_avl(bt:Node)->AVLNode:
+    """ Takes a binary tree and returns a deepcopy of it consisting of AVLNOdes.
+        Note that this does not balance the tree, it only changes the underlying class
+    """
+    
+    if bt is None:
+        return None
+    
+    def rec_impl_(p:Node, pn:AVLNode):
+        if p.left is not None:
+            pn.left = AVLNode(p.left.value)
+            rec_impl_(p.left, pn.left)
+        if p.right is not None:
+            pn.right = AVLNode(p.right.value)
+            rec_impl_(p.right, pn.right)
+    
+    root = AVLNode(bt.value)
+    rec_impl_(bt, root)
+    return root
+    
         
     
 
