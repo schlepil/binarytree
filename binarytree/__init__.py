@@ -2242,6 +2242,18 @@ class annotator:
             :param node: The node
         """
         return self.color_node(node, "")
+    
+    def color_tree(self, root:Node, color="red"):
+        if root is None:
+            return
+        for n in root:
+            self.color_node(n, color)
+    
+    def uncolor_tree(self, root:Node):
+        if root is None:
+            return
+        for n in root:
+            self.uncolor_node(n)
 
     def annotate_node(self, node:"Node", txt:str):
         """ Annotate a single node
@@ -2520,7 +2532,7 @@ def bst_insert_root(bst:Node, x:"value"):
         else:
             raise RuntimeError(f"Label {x} already exists in the tree")
     root = Node(x)
-    insert_impl_(bst, proxy(root, 0), proxy(root, 1))
+    insert_impl_(bst, rel_place(root, 0), rel_place(root, 1))
     return root
 
 def rand_node(node:Node):
@@ -2568,7 +2580,7 @@ def bst_delete_node(bst:Node, x:"val"):
         if n.value == x:
             break
         p = n
-        d = 0 if n.value < x else 1
+        d = 0 if x < n.value else 1
         n = n.right if d else n.left
     
     if n is None:
@@ -2580,7 +2592,7 @@ def bst_delete_node(bst:Node, x:"val"):
     if n.left is not None and n.right is not None:
         # Two children
         # In this case: search the inorder predescessor and swap them
-        inopp = n #parent if inorder pred
+        inopp = n #parent of inorder pred
         inop = n.left
         while inop.right is not None:
             inopp = inop
@@ -2593,7 +2605,7 @@ def bst_delete_node(bst:Node, x:"val"):
     elif n.left is not None or n.right is not None:
         # Only one child
         # We can cut the node from the tree by replacing it with
-        # its only in child except if it is the root
+        # its only child, except if it is the root
         if p is None:
             new_root = n.left if n.left is not None else n.right
         else:
@@ -2605,8 +2617,8 @@ def bst_delete_node(bst:Node, x:"val"):
     elif n.left is None and n.right is None:
         # Leaf
         # We can simply delete it
-        # this means setting the place in the parent to None
-        # or create a new node
+        # This means setting the place in the parent to None
+        # or create a new node if it is the root
         if p is None:
             # root
             new_root = None
