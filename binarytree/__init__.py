@@ -2643,20 +2643,27 @@ class AVLNode(Node):
         This is a usual node of a bst and in addition it also keeps track 
         of its balance factor (bf)
     """
-    def __init__(self, x:"val", left:Optional[Node], right:Optional[Node], bf:Optional[int]):
+    def __init__(self, x:"val", left:Optional[Node]=None, right:Optional[Node]=None, bf:Optional[int]=0):
         Node.__init__(self, x, left, right)
         self.bf = bf
     
-    def graphviz(anno:annotator=None):
+    def graphviz(self, anno:annotator=None):
         from copy import deepcopy
         if anno is None:
-            anno = {}
+            anno = annotator()
         
         # Use the annotator to add the balance factor
         anno2 = deepcopy(anno)
         for n in self:
-            anno2.annotate_node(node, f" : {n.bf} - {anno.node2str(n)}")
+            sadd = anno.node2str(n)
+            if sadd != "":
+                sadd = " - " + sadd
+            anno2.annotate_node(n, f" : {n.bf}{sadd}")
         return Node.graphviz(self, anno2)
+    
+    def __deepcopy__(self, *args, **kwargs):
+        #Argh todo....
+        return AVLNode(deepcopy(self.value), deepcopy(self.left), deepcopy(self.right), deepcopy(self.bf))
 
 def make_avl(bt:Node)->AVLNode:
     """ Takes a binary tree and returns a deepcopy of it consisting of AVLNOdes.
@@ -2679,6 +2686,37 @@ def make_avl(bt:Node)->AVLNode:
     return root
     
         
+def is_equal(root1:Node, root2:Node):
+    """ Tests if the two trees rooted at root1 and root2
+        are equal using an iterative approach
+        
+        The trick to
+        1) elements in todo correspond to a pair of nodes, one 
+           from the tree rooted at root1 and one from the tree rooted at tree2
+        2) accepting empty tree in the pairs makes the code easier
+        
+        You can do dfs or bfs, it does not make a difference
+    """
     
-
+    #init
+    todo = [(root1, root2)]
     
+    #Main loop
+    while todo:
+        (n1,n2) = todo.pop()
+        # Same comp as before
+        # However "return true" becomes continue the computation
+        if n1 is None or n2 is None:
+            if n1 is not n2:
+                # We found proof for them being different
+                return False
+            continue # No "recursion on empty"
+        if n1.value != n2.value:
+            # We found proof for them being different
+            return False
+        # "Recursion"
+        todo.append((n1.left, n2.left))
+        todo.append((n1.right, n2.right))
+    
+    # We traversed both trees without finding a difference
+    return True    
